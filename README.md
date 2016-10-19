@@ -4,9 +4,10 @@ This script takes an alembic root directory and a yaml specification (see sample
 
 
 TODO: 
-Support foreign key constraints 
-Support primary key constraints
-Support constraints
+-Support foreign key constraints 
+-Support primary key constraints
+-Support constraints
+-Support table kwargs. 
 
 syntax: 
 python gen_revision \<absolute_path_to_alembic_project_dir\> \<absolute_path_to_yaml_spec\>
