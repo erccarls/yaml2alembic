@@ -1,0 +1,99 @@
+--- # Begin the yaml file 
+
+revision_message: "This is a sample revision comment, i.e. the one you would specify with alembic revision -m xxxxx"
+revision_long_message: |    
+                        """
+                        This is a test long revision message.... Test long message.
+                        """
+
+# This is just a code block that gets appended in the header area.  Can include any python code.
+# However, spacing is fragile.  The alignment and lack of quoting must be consistent as shown below.
+imports: |
+        from alembic_addons.table_classes import *
+        from sqlalchemy.dialects.postgresql import UUID
+        
+
+
+#-----------------------------------
+# Tables
+#-----------------------------------
+tables: 
+    #-----------------------------------
+    # This is the minimal_table specification.
+    minimal_table:
+        comment: |
+                """Sample comment for minimal_table""" # This is the comment that is actually added to the schema. 
+        schema: sample_schema
+        # Define the column names and properties. 
+        columns: 
+            # Define each column, datatype, and a comment on the field
+            sample_col_id: # This is the column name
+                dtype: sa.Integer # data type
+                comment: |
+                        """This is a comment for sample_col_id"""
+
+
+
+
+
+
+    #-----------------------------------
+    # This is a more complex table which includes block commenting, 
+    # as well as allowing block comments in the revision script itself 
+    # and the passing of kwargs. 
+    more_features_table: 
+        # script_comment will append a block comment in front of the table code in the revision script. 
+        # The "|" will allow for multi-line comments.  This can be useful for long descriptions of tables. 
+        script_comment: |
+                        #     This comment block will be appended before the table code block. We can skip lines, but spacing should be consistent
+                            #
+                            #     Here is a lower line.....
+        
+        comment: |
+                 """This is a sample table comment which is added to the schema."""
+        schema: sample_schema
+        columns: 
+            # Define each column, datatype, and a comment on the field
+            sample_col_id: 
+                dtype: sa.Integer
+                comment: | 
+                        """This is a random comment for sample column 1"""
+
+            sample_string_column:
+                dtype: sa.String
+                # If special characters are used in the values, we need to use quotes. 
+                comment: |
+                        """This is a random comment for sample column 2 
+                        the pipe allows us to include line breaks in 
+                        comments in order to break across many lines."""    
+        
+
+
+
+
+
+#-----------------------------------
+# Primary Keys
+#-----------------------------------
+
+
+#-----------------------------------
+# Foreign Keys
+#-----------------------------------
+# Add foreign key (sample_col_id) constraint between minimal_table and more_features_table
+foreign_keys:
+    sample_assignment_foreign_key: # This is the constraint name... 
+        source_table: minimal_table
+        referent_table: more_features_table
+        local_cols: ["sample_col_id"]
+        remote_cols: ["sample_col_id"]
+        source_schema: sample_schema
+        referent_schema: sample_schema
+
+
+
+# Add options for create foreign key.
+# Add options for 
+
+
+... # end the yaml file
