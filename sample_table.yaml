@@ -1,10 +1,10 @@
 --- # Begin the yaml file 
 
 revision_message: "This is a sample revision comment, i.e. the one you would specify with alembic revision -m xxxxx"
-revision_long_message: |    
-                        """
-                        This is a test long revision message.... Test long message.
-                        """
+# revision_long_message: |    
+#                         """
+#                         This is a test long revision message.... Test long message.
+#                         """
 
 # This is just a code block that gets appended in the header area.  Can include any python code.
 # However, spacing is fragile.  The alignment and lack of quoting must be consistent as shown below.
