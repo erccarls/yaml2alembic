@@ -9,4 +9,4 @@ Support primary key constraints
 Support constraints
 
 syntax: 
-python gen_revision absolute_path_to_alembic_project_dir absolute_path_to_yaml_spec
+python gen_revision \<absolute_path_to_alembic_project_dir absolute_path_to_yaml_spec
