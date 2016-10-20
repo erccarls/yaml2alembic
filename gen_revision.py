@@ -1,27 +1,28 @@
 import sys
-import yaml
 import os
 from subprocess import Popen, PIPE
 from string import Template
-
+import yaml
 
 def gen_revision(revision_message):
-    '''Given a revision message, generate a new revision and return the filepath of the alembic script. 
-    
+    '''Given a revision message, generate a new revision and return the filepath
+       of the alembic script.
+
     Parameters
     ----------
     revision_message : str
-        Alembic revision message. 
+        Alembic revision message.
 
     Returns
     -------
     str
         filepath to revision script.
     '''
-    # Generate a new revision and capture the output filename. 
-    p = Popen(["alembic", "revision", "-m", revision_message], stdout=PIPE, stderr=PIPE)
+    # Generate a new revision and capture the output filename.
+    p = Popen(["alembic", "revision", "-m", revision_message],
+            stdout=PIPE, stderr=PIPE)
 
-    # Read the output and parse the filename of the updated revision. 
+    # Read the output and parse the filename of the updated revision.
     for line in p.stdout.readlines():
         print(line)
         
@@ -43,22 +44,39 @@ def find_line_num(fname, phrase):
     with open(fname, 'r') as f:
         for num, line in enumerate(f.readlines()):
             if phrase in line: 
-                return num 
+                return num
     return None
 
 
-def add_imports(revision_filepath, revision_dict): 
+def add_imports(revision_filepath, revision_dict):
+    '''
+    Adds import block at the top of the output revision script.
+
+    Parameters
+    ----------
+    revision_filepath : str
+        Alembic parent directory (which contains alembic.ini).
+    revision_dict : dict
+        The dictionary result from loading the yaml file of interest.
+
+    Returns
+    -------
+    None
+    '''
+
     #-----------------------------------
     # Define templates.....
     imports_template = '''$imports\n'''
     # Search for the current last imports line...
-    line_num = find_line_num(revision_filepath, phrase='from alembic_addons.table_classes import *')
-    # Read the current contents. 
+    line_num = find_line_num(revision_filepath,
+                            phrase='from alembic_addons.table_classes import *')
+    # Read the current contents.
     with open(revision_filepath, 'r') as f:
         contents = f.readlines()
 
     # Insert the new lines 
-    contents.insert(line_num+1, Template(imports_template).substitute(imports=revision_dict['imports']))
+    contents.insert(line_num+1, 
+        Template(imports_template).substitute(imports=revision_dict['imports']))
 
     # Write out the new file. 
     with open(revision_filepath, 'w') as f:
@@ -67,8 +85,20 @@ def add_imports(revision_filepath, revision_dict):
 
 def add_tables(revision_filepath, revision_dict):
     '''
-    Given the path to a blank revision template and a revision_dict (from yaml.load()), 
-    insert the table creations and drops.
+    Specifies and creates tables with columns in the alembic revision script as 
+    well as adding to the downgrades.  The strings are generated and then 
+    inserted into the alembic script.  
+    
+    Parameters
+    ----------
+    revision_filepath : str
+        Alembic parent directory (which contains alembic.ini). 
+    revision_dict : dict
+        The dictionary result from loading the yaml file of interest.   
+
+    Returns
+    -------
+    None
     '''
 
     table_template = '''
@@ -84,17 +114,24 @@ def add_tables(revision_filepath, revision_dict):
     create_table_template = '''    $table_name.create_table()\n'''
     drop_table_template = '''    op.drop_table(table_name="$table_name", schema="$schema")\n'''
 
- 
-    upgrade_body = '' # This will be inserted into the upgrade method body. 
-    downgrade_body = '' # This will be inserted into the downgrade method body. 
+    # Create primary key relation template
+    pk_template = '''
+    op.create_primary_key(constraint_name="$constraint_name",
+                          table_name="$table_name",
+                          columns=$columns,
+                          schema="$schema")\n'''
+
+
+
+    upgrade_body = '' # This will be inserted into the upgrade method body.
+    downgrade_body = '' # This will be inserted into the downgrade method body.
     #-----------------------------------
     # Generate templates for each table and for each comment.
     for table_name, table in revision_dict['tables'].items():
-        
         # Table block comment
-        upgrade_body += """\n    #-------------""" + table_name + """-------------#\n""" 
+        upgrade_body += """\n    #-------------""" + table_name + """-------------#\n"""
 
-        if 'script_comment' in table.keys(): 
+        if 'script_comment' in table.keys():
             upgrade_body += '    ' + table['script_comment']
 
         # Instantiate the table object
@@ -105,76 +142,95 @@ def add_tables(revision_filepath, revision_dict):
                 table_comment=table['comment'])
         downgrade_body += \
             Template(drop_table_template).substitute(
-                table_name=table_name, 
-                schema=table['schema']) 
+                table_name=table_name,
+                schema=table['schema'])
 
-        # loop over columnss    
+        # loop over columnss
         for column_name, column in table['columns'].items():
             # Create the columns
             upgrade_body += \
                 Template(column_template).substitute(
                     column_name=column_name,
-                    column_data_type=column['dtype'], 
+                    column_data_type=column['dtype'],
                     column_comment=column['comment'])
             # Add the columns
-            upgrade_body += Template(add_column_template).substitute(table_name=table_name, 
+            upgrade_body += Template(add_column_template).substitute(table_name=table_name,
                                                                      column_name=column_name)
 
-        # Create the table     
+        # Create the table
         upgrade_body += Template(create_table_template).substitute(table_name=table_name)
 
+
+
+        #------------------------------------------------
+        # Add the primary keys for each table...
+        if 'primary_key' not in table.keys():
+            print('Warning... No primary key specified for table '+ table_name)
+            continue
+
+        # Table block comment
+        upgrade_body += """\n    #-------------""" + table_name + """_pk-------------#\n"""
+        # Add the PK revision code. 
+        upgrade_body += \
+            Template(pk_template).substitute(
+                constraint_name=table_name+'_pk',
+                table_name=table_name,
+                columns=table['primary_key']['columns'],
+                schema=table['schema'])
+
+
     #----------------------------------
-    # Write upgrades to revision file 
+    # Write upgrades to revision file
     line_num = find_line_num(revision_filepath, phrase='def upgrade():')
-    # Read the current contents. 
+    # Read the current contents.
     with open(revision_filepath, 'r') as f:
         contents = f.readlines()
-    # Insert the new lines 
+    # Insert the new lines
     contents.insert(line_num+1, upgrade_body)
-    # Write out the new file. 
+    # Write out the new file.
     with open(revision_filepath, 'w') as f:
         contents = f.writelines(contents)
 
     #----------------------------------
-    # Write downgrades to revision file 
+    # Write downgrades to revision file
     line_num = find_line_num(revision_filepath, phrase='def downgrade():')
-    # Read the current contents. 
+    # Read the current contents.
     with open(revision_filepath, 'r') as f:
         contents = f.readlines()
-    # Insert the new lines 
+    # Insert the new lines
     contents.insert(line_num+1, downgrade_body)
-    # Write out the new file. 
+    # Write out the new file.
     with open(revision_filepath, 'w') as f:
         contents = f.writelines(contents)
-    
 
     #-----------------------------------
-    # Test above.  If works, then insert the string into the location of the upgrade code. 
-    # Add downgrades too. 
+    # Test above.  If works, then insert the string into the location of the
+    # upgrade code. Add downgrades too.
     #print(upgrade_body)
 
 
-    
+
+
 
 if __name__ == "__main__":
 
     #--------------------------------------------
-    # Generate the revision script with alembic 
+    # Generate the revision script with alembic
     #--------------------------------------------
     # Check num args...
     if len(sys.argv) != 3:
-        raise Exception('''Not enough arguments.  syntax is 
+        raise Exception('''Not enough arguments.  syntax is
                 python gen_revision.py <alembic_path> <script_file>''')
-    # Load the revision message. 
+    # Load the revision message.
     revision = yaml.load(open(sys.argv[2], 'r'))
-    # Change t=o the alembic directory 
+    # Change t=o the alembic directory
     os.chdir(sys.argv[1])
-    # Generate the revision by calling alembic. 
+    # Generate the revision by calling alembic.
     revision_filepath = gen_revision(revision['revision_message'])
 
     #--------------------------------------------
-    # Edit the script by reading the yaml file in 
-    # and inserting the necessary operations. 
+    # Edit the script by reading the yaml file in
+    # and inserting the necessary operations.
     #--------------------------------------------
     add_imports(revision_filepath, revision)
     add_tables(revision_filepath, revision)
