@@ -87,7 +87,8 @@ def add_tables(revision_filepath, revision_dict):
     '''
     Specifies and creates tables with columns in the alembic revision script as 
     well as adding to the downgrades.  The strings are generated and then 
-    inserted into the alembic script.  
+    inserted into the alembic script.  We also generate constraints on columns 
+    in addition to primary keys. 
     
     Parameters
     ----------
@@ -121,6 +122,13 @@ def add_tables(revision_filepath, revision_dict):
                           table_name="$table_name",
                           columns=$columns,
                           schema="$schema")\n'''
+    
+    constraint_template = '''    
+    op.create_check_constraint(
+        constraint_name="$constraint_name",
+        table_name="$table_name",
+        condition="$condition",
+        schema="$schema")\n'''
 
 
 
@@ -182,6 +190,22 @@ def add_tables(revision_filepath, revision_dict):
                 table_name=table_name,
                 columns=table['primary_key']['columns'],
                 schema=table['schema'])
+
+
+        #------------------------------------------------
+        # Add the constraints for the table. 
+        if 'constraints' in table.keys():
+            for constraint_name, constraint in table['constraints'].items(): 
+                # Table block comment
+                upgrade_body += """\n    #-------------""" + constraint_name \
+                                + """_pk-------------#\n"""
+                # Add the PK revision code. 
+                upgrade_body += \
+                    Template(constraint_template).substitute(
+                        constraint_name=table_name+'_'+constraint_name,
+                        table_name=table_name,
+                        condition=constraint['condition'],
+                        schema=table['schema'])
 
 
     #----------------------------------
