@@ -111,7 +111,7 @@ def add_tables(revision_filepath, revision_dict):
     $column_name = CommentedColumn(column_name='$column_name',
                                     column_type=$column_data_type,
                                      comment=$column_comment                    ) '''
-    add_column_template = '''\n    $table_name.add_column('$column_name')\n'''
+    add_column_template = '''\n    $table_name.add_column($column_name )\n'''
     create_table_template = '''    $table_name.create_table()\n'''
     drop_table_template = \
         '''    op.drop_table(table_name="$table_name", schema="$schema")\n'''
