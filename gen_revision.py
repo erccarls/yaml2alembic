@@ -112,7 +112,8 @@ def add_tables(revision_filepath, revision_dict):
                                      comment=$column_comment                    ) '''
     add_column_template = '''\n    $table_name.add_column('$column_name')\n'''
     create_table_template = '''    $table_name.create_table()\n'''
-    drop_table_template = '''    op.drop_table(table_name="$table_name", schema="$schema")\n'''
+    drop_table_template = \
+        '''    op.drop_table(table_name="$table_name", schema="$schema")\n'''
 
     # Create primary key relation template
     pk_template = '''
@@ -129,7 +130,8 @@ def add_tables(revision_filepath, revision_dict):
     # Generate templates for each table and for each comment.
     for table_name, table in revision_dict['tables'].items():
         # Table block comment
-        upgrade_body += """\n    #-------------""" + table_name + """-------------#\n"""
+        upgrade_body += """\n    #-------------""" + table_name \
+                      + """-------------#\n"""
 
         if 'script_comment' in table.keys():
             upgrade_body += '    ' + table['script_comment']
@@ -154,11 +156,13 @@ def add_tables(revision_filepath, revision_dict):
                     column_data_type=column['dtype'],
                     column_comment=column['comment'])
             # Add the columns
-            upgrade_body += Template(add_column_template).substitute(table_name=table_name,
-                                                                     column_name=column_name)
+            upgrade_body += Template(add_column_template
+                                    ).substitute(table_name=table_name,
+                                                 column_name=column_name)
 
         # Create the table
-        upgrade_body += Template(create_table_template).substitute(table_name=table_name)
+        upgrade_body += Template(create_table_template
+                                ).substitute(table_name=table_name)
 
 
 
@@ -169,7 +173,8 @@ def add_tables(revision_filepath, revision_dict):
             continue
 
         # Table block comment
-        upgrade_body += """\n    #-------------""" + table_name + """_pk-------------#\n"""
+        upgrade_body += """\n    #-------------""" + table_name \
+                        + """_pk-------------#\n"""
         # Add the PK revision code. 
         upgrade_body += \
             Template(pk_template).substitute(
@@ -208,8 +213,110 @@ def add_tables(revision_filepath, revision_dict):
     # upgrade code. Add downgrades too.
     #print(upgrade_body)
 
+def add_foreign_keys(revision_filepath, revision_dict):
+    '''
+    Generates foreign key relationships for the alembic revision script upgrades 
+    and downgrades.  The strings are generated and then inserted into the 
+    alembic script.  
+
+    NOTE: Currently foreign keys MUST be added AFTER tables have already been 
+    created, and in a separate revision.  It is not presently possible to 
+    generate tables at the same time as adding foreign keys. 
+    
+    Parameters
+    ----------
+    revision_filepath : str
+        Alembic parent directory (which contains alembic.ini). 
+    revision_dict : dict
+        The dictionary result from loading the yaml file of interest.   
+
+    Returns
+    -------
+    None
+    '''
+
+    fk_template_upgrade = '''
+    # Add foreign key constraint to the assignment table
+    op.create_foreign_key(
+        constraint_name="$constraint_name",
+        source_table="$source_table",
+        referent_table="$referent_table",
+        local_cols=$local_cols,
+        remote_cols=$remote_cols,
+        source_schema="$source_schema",
+        referent_schema="$referent_schema")\n'''
+
+    fk_template_downgrade = '''
+    op.drop_constraint(
+            constraint_name="$constraint_name",
+            table_name="$table_name",
+            schema="$schema")\n'''
+
+    upgrade_body = '' # This will be inserted into the upgrade method body.
+    downgrade_body = '' # This will be inserted into the downgrade method body.
+
+    #-----------------------------------
+    # Generate templates for each foreign key
+    for fk_name, fk in revision_dict['foreign_keys'].items():
+
+        # Some quick error checking to ensure we have all the info in the yaml
+        for field in ['source_table', 'referent_table',
+                      'local_cols', 'remote_cols',
+                      'source_schema', 'referent_schema']:
+            if field not in fk.keys():
+                raise Exception("Foreign key constraint not fully defined!"
+                                +"See key definition for " + fk_name)
+
+        # Table block comment
+        upgrade_body += ("""\n    #-------------""" + fk['constraint_name']
+                         + """-------------#\n""")
 
 
+        constraint_name = \
+            '_'.join([fk['source_table'],
+                      fk['referent_table'],   
+                      fk['local_cols'].replace('[', '').replace(','"_"),
+                      fk['remote_cols'].replace('[', '').replace(','"_")])+'_fk'
+
+        upgrade_body += \
+            Template(fk_template_upgrade).substitute(
+                constraint_name=constraint_name,
+                source_table=fk['source_table'],
+                referent_table=fk['referent_table'],
+                local_cols=fk['local_cols'],
+                remote_cols=fk['remote_cols'],
+                source_schema=fk['source_schema'],
+                referent_schema=fk['source_schema'])
+
+        downgrade_body += \
+            Template(fk_template_downgrade).substitute(
+                constraint_name=constraint_name,
+                table_name=fk['source_table'],
+                schema=fk['source_schema'])
+
+        #----------------------------------
+        # Write upgrades to revision file
+        line_num = find_line_num(revision_filepath, phrase='def upgrade():')
+        # Read the current contents.
+        with open(revision_filepath, 'r') as f:
+            contents = f.readlines()
+        # Insert the new lines
+        contents.insert(line_num+1, upgrade_body)
+        # Write out the new file.
+        with open(revision_filepath, 'w') as f:
+            contents = f.writelines(contents)
+
+        #----------------------------------
+        # Write downgrades to revision file
+        line_num = find_line_num(revision_filepath, phrase='def downgrade():')
+        # Read the current contents.
+        with open(revision_filepath, 'r') as f:
+            contents = f.readlines()
+        # Insert the new lines
+        contents.insert(line_num+1, downgrade_body)
+        # Write out the new file.
+        with open(revision_filepath, 'w') as f:
+            contents = f.writelines(contents)
 
 
 if __name__ == "__main__":
